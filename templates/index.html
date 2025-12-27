@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8">
+    <title>AZP-X-Bot - Lokal Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --bg-card: #020617;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.18);
+            --text: #e5e7eb;
+            --muted: #6b7280;
+            --error: #f97373;
+            --success: #4ade80;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #1e293b 0, #020617 45%, #000 100%);
+            color: var(--text);
+        }
+        .shell { width: 100%; max-width: 720px; padding: 24px; }
+        .card {
+            background: linear-gradient(145deg, rgba(15,23,42,0.96), rgba(15,23,42,0.96));
+            border-radius: 18px;
+            border: 1px solid rgba(148,163,184,0.24);
+            box-shadow: 0 24px 60px rgba(15,23,42,0.95);
+            padding: 22px 22px 20px;
+            backdrop-filter: blur(16px);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+        h1 { margin: 0; font-size: 22px; letter-spacing: 0.01em; }
+        .subtitle { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+        .badge { font-size: 11px; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(56,189,248,0.35); }
+        form { margin-top: 4px; }
+        label { display: block; font-size: 13px; margin-bottom: 6px; color: #e5e7eb; }
+        select, textarea {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.45);
+            background: rgba(15,23,42,0.9);
+            color: var(--text);
+            padding: 9px 10px;
+            font-size: 13px;
+            outline: none;
+            transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(56,189,248,0.25); background: rgba(15,23,42,1); }
+        textarea { min-height: 90px; resize: vertical; line-height: 1.4; }
+        .field { margin-bottom: 14px; }
+        .helper { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        button { border: none; border-radius: 999px; padding: 8px 18px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-secondary { background: rgba(15,23,42,0.9); color: var(--muted); border: 1px solid rgba(148,163,184,0.4); }
+        .btn-primary { background: var(--accent); color: #0b1120; font-weight: 500; }
+        .flash { border-radius: 999px; padding: 7px 12px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .flash-success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.45); color: #bbf7d0; }
+        .flash-error { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.5); color: #fecaca; }
+        .flash span { font-size: 16px; }
+        .no-accounts { font-size: 12px; color: var(--error); margin-top: 6px; }
+        .footer { margin-top: 14px; font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+        .add-account { margin-bottom: 14px; text-align: right; }
+        @media (max-width: 640px) { .card { padding: 18px 16px 16px; } .shell { padding: 14px; } }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <h1>AZP-X-Bot (Lokal)</h1>
+                <p class="subtitle">Hesap ekleyin ve mesaj gönderin / Add account & send text.</p>
+            </div>
+            <div class="badge">Local Only</div>
+        </div>
+
+        <div class="add-account">
+            <a href="/login" class="btn-primary">➕ Hesap Ekle / Add Account</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">
+                        <span>{% if category == 'success' %}✓{% elif category == 'error' %}!{% else %}●{% endif %}</span>
+                        <div>{{ message }}</div>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            <div class="field">
+                <label for="account">Hesap / Account</label>
+                <select id="account" name="account" {% if not accounts %}disabled{% endif %}>
+                    {% if accounts %}
+                        <option value="">Hesap seçin / Select account</option>
+                        {% for acc in accounts %}
+                            <option value="{{ acc.id }}">{{ acc.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">Hesap bulunamadı</option>
+                    {% endif %}
+                </select>
+                {% if not accounts %}
+                    <div class="no-accounts">Lütfen önce bir hesap ekleyin / Please add an account first</div>
+                {% endif %}
+            </div>
+
+            <div class="field">
+                <label for="text">Mesaj / Text</label>
+                <textarea id="text" name="text" placeholder="Gönderilecek mesajı yazın / Type message..." maxlength="280"></textarea>
+                <div class="helper">Maks 280 karakter / Max 280 chars. Lokal kullanım.</div>
+            </div>
+
+            <div class="actions">
+                <button type="reset" class="btn-secondary">Temizle / Clear</button>
+                <button type="submit" class="btn-primary">Gönder / Post</button>
+            </div>
+        </form>
+
+        <div class="footer">
+            <div>.env formatı: X_CLIENT_ID, X_CLIENT_SECRET, X_ACCOUNT*_NAME, X_ACCOUNT*_ACCESS_TOKEN ...</div>
+            <div>Flask · Local Only</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
