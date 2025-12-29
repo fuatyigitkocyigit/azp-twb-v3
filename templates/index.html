@@ -46,7 +46,8 @@
         .badge { font-size: 11px; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(56,189,248,0.35); }
         form { margin-top: 4px; }
         label { display: block; font-size: 13px; margin-bottom: 6px; color: #e5e7eb; }
-        select, textarea {
+
+        select, textarea, input {
             width: 100%;
             border-radius: 10px;
             border: 1px solid rgba(148,163,184,0.45);
@@ -57,14 +58,29 @@
             outline: none;
             transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
-        select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(56,189,248,0.25); background: rgba(15,23,42,1); }
+        select:focus, textarea:focus, input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px rgba(56,189,248,0.25);
+            background: rgba(15,23,42,1);
+        }
+
         textarea { min-height: 90px; resize: vertical; line-height: 1.4; }
         .field { margin-bottom: 14px; }
         .helper { font-size: 11px; color: var(--muted); margin-top: 4px; }
-        .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-        button { border: none; border-radius: 999px; padding: 8px 18px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+
+        button {
+            border: none;
+            border-radius: 999px;
+            padding: 8px 18px;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
         .btn-secondary { background: rgba(15,23,42,0.9); color: var(--muted); border: 1px solid rgba(148,163,184,0.4); }
         .btn-primary { background: var(--accent); color: #0b1120; font-weight: 500; }
+
         .flash { border-radius: 999px; padding: 7px 12px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
         .flash-success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.45); color: #bbf7d0; }
         .flash-error { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.5); color: #fecaca; }
@@ -72,7 +88,37 @@
         .no-accounts { font-size: 12px; color: var(--error); margin-top: 6px; }
         .footer { margin-top: 14px; font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
         .add-account { margin-bottom: 14px; text-align: right; }
-        @media (max-width: 640px) { .card { padding: 18px 16px 16px; } .shell { padding: 14px; } }
+
+        /* NEW layout under helper: ASIN on right + Generate button on right */
+        .asin-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-start; /* to the right */
+            gap: 8px;
+            align-items: center;
+        }
+        .asin-input {
+            width: 210px;          /* small input */
+            max-width: 55%;
+            padding: 8px 10px;
+            border-radius: 999px;  /* pill style */
+        }
+
+        /* Buttons row below: Clear + Post on left */
+        .actions {
+            display: flex;
+            justify-content: flex-end; /* left like before */
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 640px) {
+            .card { padding: 18px 16px 16px; }
+            .shell { padding: 14px; }
+
+            .asin-row { justify-content: space-between; }
+            .asin-input { width: 55%; max-width: none; }
+        }
     </style>
 </head>
 <body>
@@ -101,6 +147,11 @@
             {% endif %}
         {% endwith %}
 
+        <div id="genFlash" class="flash flash-error" style="display:none;">
+            <span>!</span>
+            <div id="genFlashMsg"></div>
+        </div>
+
         <form method="post">
             <div class="field">
                 <label for="account">Hesap / Account</label>
@@ -123,8 +174,21 @@
                 <label for="text">Mesaj / Text</label>
                 <textarea id="text" name="text" placeholder="Gönderilecek mesajı yazın / Type message..." maxlength="280"></textarea>
                 <div class="helper">Maks 280 karakter / Max 280 chars. Lokal kullanım.</div>
+
+                <!-- NEW: ASIN input + Generate button (right) -->
+                <div class="asin-row">
+                    <input
+                        id="asin"
+                        class="asin-input"
+                        type="text"
+                        placeholder="ASIN (e.g. B00KALEHJE)"
+                        autocomplete="off"
+                    />
+                    <button type="button" id="generateBtn" class="btn-secondary">✨ Tweet Üret / Generate Tweet</button>
+                </div>
             </div>
 
+            <!-- Clear + Post below on the left -->
             <div class="actions">
                 <button type="reset" class="btn-secondary">Temizle / Clear</button>
                 <button type="submit" class="btn-primary">Gönder / Post</button>
@@ -137,5 +201,63 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const asinInput = document.getElementById("asin");
+    const textArea = document.getElementById("text");
+    const btn = document.getElementById("generateBtn");
+    const genFlash = document.getElementById("genFlash");
+    const genFlashMsg = document.getElementById("genFlashMsg");
+
+    function showGenError(msg) {
+        genFlash.style.display = "flex";
+        genFlashMsg.textContent = msg;
+    }
+    function clearGenError() {
+        genFlash.style.display = "none";
+        genFlashMsg.textContent = "";
+    }
+
+    btn.addEventListener("click", async () => {
+        clearGenError();
+
+        const asin = (asinInput.value || "").trim();
+        if (!asin) {
+            showGenError("Please enter an ASIN.");
+            return;
+        }
+
+        btn.disabled = true;
+        const oldText = btn.textContent;
+        btn.textContent = "⏳ Generating...";
+
+        try {
+            const res = await fetch("/generate_tweet", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ asin })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.ok) {
+                showGenError(data.error || "Failed to generate tweet.");
+                return;
+            }
+
+            // Put generated tweet into textarea
+            textArea.value = data.post_text;
+
+        } catch (e) {
+            showGenError("Network/server error while generating tweet.");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = oldText;
+        }
+    });
+})();
+</script>
+
 </body>
 </html>

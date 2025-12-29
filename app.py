@@ -8,6 +8,9 @@ import requests
 from flask import Flask, redirect, request, render_template, flash, session
 from dotenv import load_dotenv
 from urllib.parse import urlencode
+from flask import jsonify
+from get_description import generate_post_text_for_asin
+
 
 load_dotenv()
 
@@ -16,7 +19,7 @@ CLIENT_SECRET = os.getenv("X_CLIENT_SECRET")
 CALLBACK_URL = os.getenv("CALLBACK_URL")
 SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
 
-TOKEN_FILE = "users.json"  # Local token dosyası
+TOKEN_FILE = "users.json"  # Lokal token dosyası
 
 AUTH_URL = "https://twitter.com/i/oauth2/authorize"
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
@@ -25,6 +28,19 @@ TWEET_URL = "https://api.twitter.com/2/tweets"
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "dev-secret-change-me")
+
+@app.route("/generate_tweet", methods=["POST"])
+def generate_tweet():
+    data = request.get_json(silent=True) or {}
+    asin = (data.get("asin") or "").strip()
+    if not asin:
+        return jsonify({"ok": False, "error": "ASIN is required"}), 400
+
+    try:
+        post_text = generate_post_text_for_asin(asin)
+        return jsonify({"ok": True, "post_text": post_text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 # ------------------ USERS ------------------
 if os.path.exists(TOKEN_FILE):
@@ -129,18 +145,18 @@ def callback():
 
     user_info = user_resp.json()["data"]
 
-    # Store token data in session for email entry step
-    session["pending_user_data"] = {
-        "user_id": user_info["id"],
+    # Save in USERS + file
+    USERS[user_info["id"]] = {
         "username": user_info.get("username") or user_info.get("name") or user_info["id"],
         "access_token": access_token,
         "refresh_token": refresh_token,
         "expires_in": expires_in,
         "obtained_at": int(time.time()),
     }
+    save_users()
 
-    # Redirect to email entry page
-    return redirect("/enter_email")
+    flash(f"Hesap eklendi: {USERS[user_info['id']]['username']}", "success")
+    return redirect("/")
 
 # ---------------- TOKEN REFRESH ----------------
 def refresh_token_if_needed(user_id: str):
@@ -217,48 +233,7 @@ def post_tweet_v2(user_id, text):
         return True, "Tweet gönderildi"
     return False, f"{resp.status_code} {resp.text}"
 
-# ---------------- EMAIL ENTRY ---------------- 
-@app.route("/enter_email", methods=["GET", "POST"])
-def enter_email():
-    # Check if there's pending user data in session
-    pending_data = session.get("pending_user_data")
-    if not pending_data:
-        flash("Geçersiz oturum. Lütfen tekrar giriş yapın.", "error")
-        return redirect("/")
-
-    if request.method == "POST":
-        email = (request.form.get("email") or "").strip()
-        
-        if not email:
-            flash("Lütfen e-posta adresini girin / Please enter email address", "error")
-            return render_template("enter_email.html", username=pending_data.get("username", ""))
-        
-        # Basic email validation
-        if "@" not in email or "." not in email.split("@")[1]:
-            flash("Geçerli bir e-posta adresi girin / Please enter a valid email address", "error")
-            return render_template("enter_email.html", username=pending_data.get("username", ""))
-
-        # Save user data with email to USERS + file
-        user_id = pending_data["user_id"]
-        USERS[user_id] = {
-            "username": pending_data["username"],
-            "email": email,
-            "access_token": pending_data["access_token"],
-            "refresh_token": pending_data["refresh_token"],
-            "expires_in": pending_data["expires_in"],
-            "obtained_at": pending_data["obtained_at"],
-        }
-        save_users()
-
-        # Clear session data
-        session.pop("pending_user_data", None)
-
-        flash(f"Hesap eklendi: {pending_data['username']} ({email})", "success")
-        return redirect("/")
-
-    return render_template("enter_email.html", username=pending_data.get("username", ""))
-
-# ---------------- UI ---------------- 
+# ---------------- UI ----------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     accounts = [{"id": uid, "name": u.get("username", uid)} for uid, u in USERS.items()]
