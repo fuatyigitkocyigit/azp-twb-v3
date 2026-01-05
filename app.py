@@ -13,7 +13,6 @@ from urllib.parse import urlencode, urlparse, parse_qs
 from flask import jsonify
 from get_description import generate_post_text_for_asin, generate_tweet_from_prompt
 
-
 load_dotenv()
 
 CLIENT_ID = os.getenv("X_CLIENT_ID")
@@ -658,4 +657,14 @@ def enter_email():
     return render_template("enter_email.html", username=pending_user.get("username"))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Server configuration - accepts requests from all network interfaces
+    # For production, consider using gunicorn: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+    host = os.getenv("FLASK_HOST", "0.0.0.0")  # Default: accept from all interfaces
+    port = int(os.getenv("FLASK_PORT", 5000))  # Default port: 5000
+    debug = os.getenv("FLASK_DEBUG", "False").lower() == "true"  # Default: False for production
+    
+    print(f"🚀 Server starting on http://{host}:{port}")
+    print(f"📡 Accepting requests from all network interfaces")
+    print(f"🔧 Debug mode: {debug}")
+    
+    app.run(debug=debug, host=host, port=port)
