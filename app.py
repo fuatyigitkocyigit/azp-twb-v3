@@ -124,7 +124,7 @@ def callback():
 
     resp = requests.post(TOKEN_URL, data=data, headers=headers, timeout=30)
     if resp.status_code != 200:
-        flash(f"Hata token alırken: {resp.status_code} {resp.text}", "error")
+        flash(f"Error getting token: {resp.status_code} {resp.text}", "error")
         return redirect("/")
 
     token_data = resp.json()
@@ -140,23 +140,23 @@ def callback():
     headers_user = {"Authorization": f"Bearer {access_token}"}
     user_resp = requests.get(ME_URL, headers=headers_user, timeout=30)
     if user_resp.status_code != 200:
-        flash(f"Kullanıcı bilgisi alınamadı: {user_resp.status_code} {user_resp.text}", "error")
+        flash(f"Failed to get user info: {user_resp.status_code} {user_resp.text}", "error")
         return redirect("/")
 
     user_info = user_resp.json()["data"]
 
-    # Save in USERS + file
-    USERS[user_info["id"]] = {
+    # Store user data temporarily in session for email collection
+    session["pending_user"] = {
+        "id": user_info["id"],
         "username": user_info.get("username") or user_info.get("name") or user_info["id"],
         "access_token": access_token,
         "refresh_token": refresh_token,
         "expires_in": expires_in,
         "obtained_at": int(time.time()),
     }
-    save_users()
 
-    flash(f"Hesap eklendi: {USERS[user_info['id']]['username']}", "success")
-    return redirect("/")
+    # Redirect to email entry page
+    return redirect("/enter_email")
 
 # ---------------- TOKEN REFRESH ----------------
 def refresh_token_if_needed(user_id: str):
@@ -230,25 +230,76 @@ def post_tweet_v2(user_id, text):
 
     # Some clients return 201, some return 200
     if resp.status_code in (200, 201):
-        return True, "Tweet gönderildi"
+        return True, "Tweet posted"
     return False, f"{resp.status_code} {resp.text}"
 
 # ---------------- UI ----------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     accounts = [{"id": uid, "name": u.get("username", uid)} for uid, u in USERS.items()]
+    
+    # Statistics
+    total_accounts = len(USERS)
+    accounts_with_email = sum(1 for u in USERS.values() if u.get("email"))
+    bot_status = "Active" if total_accounts > 0 else "Inactive"
 
     if request.method == "POST":
         user_id = request.form.get("account")
         text = (request.form.get("text") or "").strip()
 
         if not user_id or not text:
-            flash("Lütfen hesap ve metin girin / Please select account & enter text", "error")
+            flash("Please select account & enter text", "error")
         else:
             ok, msg = post_tweet_v2(user_id, text)
             flash(msg, "success" if ok else "error")
 
-    return render_template("index.html", accounts=accounts)
+    return render_template("index.html", 
+                         accounts=accounts,
+                         total_accounts=total_accounts,
+                         accounts_with_email=accounts_with_email,
+                         bot_status=bot_status)
+
+# ---------------- EMAIL ENTRY ---------------- 
+@app.route("/enter_email", methods=["GET", "POST"])
+def enter_email():
+    # Check if there's pending user data in session
+    pending_user = session.get("pending_user")
+    if not pending_user:
+        flash("Invalid request", "error")
+        return redirect("/")
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        
+        if not email:
+            flash("Please enter email address", "error")
+            return render_template("enter_email.html", username=pending_user.get("username"))
+        
+        # Basic email validation
+        if "@" not in email or "." not in email.split("@")[1]:
+            flash("Invalid email address", "error")
+            return render_template("enter_email.html", username=pending_user.get("username"))
+
+        # Save user with email
+        user_id = pending_user["id"]
+        USERS[user_id] = {
+            "username": pending_user["username"],
+            "email": email,
+            "access_token": pending_user["access_token"],
+            "refresh_token": pending_user["refresh_token"],
+            "expires_in": pending_user["expires_in"],
+            "obtained_at": pending_user["obtained_at"],
+        }
+        save_users()
+
+        # Clear session data
+        session.pop("pending_user", None)
+
+        flash(f"Account added: {pending_user['username']} ({email})", "success")
+        return redirect("/")
+
+    # GET request - show email entry form
+    return render_template("enter_email.html", username=pending_user.get("username"))
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <title>AZP-X-Bot - Lokal Panel</title>
@@ -10,114 +10,471 @@
             --bg-card: #020617;
             --accent: #38bdf8;
             --accent-soft: rgba(56, 189, 248, 0.18);
+            --accent-hover: #0ea5e9;
             --text: #e5e7eb;
+            --text-secondary: #cbd5e1;
             --muted: #6b7280;
             --error: #f97373;
             --success: #4ade80;
+            --warning: #fbbf24;
+            --border: rgba(148,163,184,0.24);
+            --border-hover: rgba(148,163,184,0.45);
         }
-        * { box-sizing: border-box; }
+        * { 
+            box-sizing: border-box; 
+            margin: 0;
+            padding: 0;
+        }
         body {
             margin: 0;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background: radial-gradient(circle at top, #1e293b 0, #020617 45%, #000 100%);
             color: var(--text);
+            padding: 20px;
         }
-        .shell { width: 100%; max-width: 720px; padding: 24px; }
+        .shell { 
+            width: 100%; 
+            max-width: 720px; 
+            padding: 0;
+        }
         .card {
-            background: linear-gradient(145deg, rgba(15,23,42,0.96), rgba(15,23,42,0.96));
-            border-radius: 18px;
-            border: 1px solid rgba(148,163,184,0.24);
-            box-shadow: 0 24px 60px rgba(15,23,42,0.95);
-            padding: 22px 22px 20px;
-            backdrop-filter: blur(16px);
+            background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.95));
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+            padding: 28px;
+            backdrop-filter: blur(20px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            box-shadow: 0 28px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
         }
         .card-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 18px;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
         }
-        h1 { margin: 0; font-size: 22px; letter-spacing: 0.01em; }
-        .subtitle { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
-        .badge { font-size: 11px; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(56,189,248,0.35); }
-        form { margin-top: 4px; }
-        label { display: block; font-size: 13px; margin-bottom: 6px; color: #e5e7eb; }
-
-        select, textarea, input {
-            width: 100%;
-            border-radius: 10px;
-            border: 1px solid rgba(148,163,184,0.45);
-            background: rgba(15,23,42,0.9);
+        .header-content h1 { 
+            margin: 0 0 6px 0; 
+            font-size: 24px; 
+            font-weight: 600;
+            letter-spacing: -0.01em;
             color: var(--text);
-            padding: 9px 10px;
-            font-size: 13px;
-            outline: none;
-            transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
-        select:focus, textarea:focus, input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 1px rgba(56,189,248,0.25);
-            background: rgba(15,23,42,1);
+        .subtitle { 
+            margin: 0; 
+            font-size: 13px; 
+            color: var(--muted);
+            line-height: 1.5;
         }
-
-        textarea { min-height: 90px; resize: vertical; line-height: 1.4; }
-        .field { margin-bottom: 14px; }
-        .helper { font-size: 11px; color: var(--muted); margin-top: 4px; }
-
-        button {
-            border: none;
-            border-radius: 999px;
-            padding: 8px 18px;
-            font-size: 13px;
-            cursor: pointer;
+        .badge { 
+            font-size: 11px; 
+            padding: 6px 12px; 
+            border-radius: 999px; 
+            background: var(--accent-soft); 
+            color: var(--accent); 
+            border: 1px solid rgba(56,189,248,0.35);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        
+        /* Account Section */
+        .add-account { 
+            margin-bottom: 20px; 
+        }
+        .add-account a { 
+            text-decoration: none;
             display: inline-flex;
             align-items: center;
+            gap: 8px;
+        }
+        
+        /* Stats Panel */
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(15,23,42,0.6);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
             gap: 6px;
+            transition: all 0.2s ease;
         }
-        .btn-secondary { background: rgba(15,23,42,0.9); color: var(--muted); border: 1px solid rgba(148,163,184,0.4); }
-        .btn-primary { background: var(--accent); color: #0b1120; font-weight: 500; }
-
-        .flash { border-radius: 999px; padding: 7px 12px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-        .flash-success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.45); color: #bbf7d0; }
-        .flash-error { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.5); color: #fecaca; }
-        .flash span { font-size: 16px; }
-        .no-accounts { font-size: 12px; color: var(--error); margin-top: 6px; }
-        .footer { margin-top: 14px; font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
-        .add-account { margin-bottom: 14px; text-align: right; }
-
-        /* NEW layout under helper: ASIN on right + Generate button on right */
-        .asin-row {
-            margin-top: 10px;
+        .stat-card:hover {
+            background: rgba(15,23,42,0.8);
+            border-color: var(--border-hover);
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1;
+        }
+        .stat-value.status-active {
+            color: var(--success);
+        }
+        .stat-value.status-inactive {
+            color: var(--muted);
+        }
+        .stat-icon {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+        
+        /* Info Box */
+        .info-box {
+            background: rgba(56,189,248,0.1);
+            border: 1px solid rgba(56,189,248,0.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+        .info-box-header {
             display: flex;
-            justify-content: flex-start; /* to the right */
-            gap: 8px;
             align-items: center;
-        }
-        .asin-input {
-            width: 210px;          /* small input */
-            max-width: 55%;
-            padding: 8px 10px;
-            border-radius: 999px;  /* pill style */
-        }
-
-        /* Buttons row below: Clear + Post on left */
-        .actions {
-            display: flex;
-            justify-content: flex-end; /* left like before */
             gap: 8px;
-            margin-top: 12px;
+            margin-bottom: 8px;
         }
-
-        @media (max-width: 640px) {
-            .card { padding: 18px 16px 16px; }
-            .shell { padding: 14px; }
-
-            .asin-row { justify-content: space-between; }
-            .asin-input { width: 55%; max-width: none; }
+        .info-box-header strong {
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .info-box code {
+            background: rgba(0,0,0,0.4);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+            display: block;
+            margin-top: 6px;
+        }
+        .info-box .info-note {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 8px;
+        }
+        
+        /* Flash Messages */
+        .flash { 
+            border-radius: 12px; 
+            padding: 10px 14px; 
+            font-size: 13px; 
+            margin-bottom: 16px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .flash-success { 
+            background: rgba(34,197,94,0.15); 
+            border: 1px solid rgba(34,197,94,0.4); 
+            color: #bbf7d0; 
+        }
+        .flash-error { 
+            background: rgba(248,113,113,0.15); 
+            border: 1px solid rgba(248,113,113,0.5); 
+            color: #fecaca; 
+        }
+        .flash span { 
+            font-size: 18px;
+            line-height: 1;
+        }
+        
+        /* Form Styles */
+        form { 
+            margin-top: 8px; 
+        }
+        .field { 
+            margin-bottom: 20px; 
+        }
+        label { 
+            display: block; 
+            font-size: 13px; 
+            font-weight: 500;
+            margin-bottom: 8px; 
+            color: var(--text-secondary);
+        }
+        select, textarea, input[type="text"] {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border-hover);
+            background: rgba(15,23,42,0.8);
+            color: var(--text);
+            padding: 11px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        select:focus, textarea:focus, input[type="text"]:focus { 
+            border-color: var(--accent); 
+            box-shadow: 0 0 0 3px rgba(56,189,248,0.15); 
+            background: rgba(15,23,42,1); 
+        }
+        select:hover, textarea:hover {
+            border-color: rgba(148,163,184,0.6);
+        }
+        select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        textarea { 
+            min-height: 120px; 
+            resize: vertical; 
+            line-height: 1.6;
+            font-family: inherit;
+        }
+        .helper { 
+            font-size: 11px; 
+            color: var(--muted); 
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .no-accounts { 
+            font-size: 12px; 
+            color: var(--error); 
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(248,113,113,0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(248,113,113,0.2);
+        }
+        
+        /* Checkbox */
+        .checkbox-field {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(15,23,42,0.5);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .checkbox-field:hover {
+            background: rgba(15,23,42,0.7);
+            border-color: var(--border-hover);
+        }
+        .checkbox-field input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-top: 2px;
+            cursor: pointer;
+            accent-color: var(--accent);
+            flex-shrink: 0;
+        }
+        .checkbox-field label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .checkbox-helper {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 6px;
+            margin-left: 28px;
+        }
+        
+        /* Buttons */
+        .actions { 
+            display: flex; 
+            justify-content: flex-end; 
+            gap: 10px; 
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        button { 
+            border: none; 
+            border-radius: 10px; 
+            padding: 10px 20px; 
+            font-size: 13px; 
+            font-weight: 500;
+            cursor: pointer; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 6px;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .btn-secondary { 
+            background: rgba(15,23,42,0.8); 
+            color: var(--text-secondary); 
+            border: 1px solid var(--border-hover);
+        }
+        .btn-secondary:hover { 
+            background: rgba(15,23,42,1); 
+            border-color: rgba(148,163,184,0.6);
+            color: var(--text);
+            transform: translateY(-1px);
+        }
+        .btn-primary { 
+            background: var(--accent); 
+            color: #0b1120; 
+            font-weight: 600;
+        }
+        .btn-primary:hover { 
+            background: var(--accent-hover); 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 12px rgba(56,189,248,0.4); 
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .btn-ai { 
+            background: rgba(139, 92, 246, 0.2); 
+            color: #a78bfa; 
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            padding: 6px 12px;
+            font-size: 11px;
+            margin: 0;
+            font-weight: 500;
+        }
+        .btn-ai:hover { 
+            background: rgba(139, 92, 246, 0.3); 
+            border-color: rgba(139, 92, 246, 0.6);
+            transform: translateY(-1px);
+        }
+        .btn-ai:disabled { 
+            opacity: 0.5; 
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* AI Status */
+        #ai-status { 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-size: 12px;
+            margin-top: 8px;
+            animation: slideIn 0.3s ease;
+        }
+        .ai-loading { 
+            background: rgba(56,189,248,0.15); 
+            border: 1px solid rgba(56,189,248,0.35); 
+            color: var(--accent); 
+        }
+        .ai-success { 
+            background: rgba(34,197,94,0.15); 
+            border: 1px solid rgba(34,197,94,0.45); 
+            color: #bbf7d0; 
+        }
+        .ai-error { 
+            background: rgba(248,113,113,0.15); 
+            border: 1px solid rgba(248,113,113,0.5); 
+            color: #fecaca; 
+        }
+        
+        /* Footer */
+        .footer { 
+            margin-top: 24px; 
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            font-size: 10px; 
+            color: var(--muted);
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .footer div {
+            line-height: 1.4;
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) { 
+            body {
+                padding: 12px;
+            }
+            .card { 
+                padding: 20px 18px; 
+                border-radius: 16px;
+            }
+            .card-header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+            .header-content h1 {
+                font-size: 20px;
+            }
+            .add-account { 
+                text-align: center; 
+            }
+            .add-account a {
+                width: 100%;
+                justify-content: center;
+            }
+            .stats-panel {
+                grid-template-columns: 1fr;
+            }
+            .stat-value {
+                font-size: 20px;
+            }
+            .actions {
+                flex-direction: column-reverse;
+            }
+            .actions button {
+                width: 100%;
+                justify-content: center;
+            }
+            .btn-ai { 
+                display: block; 
+                width: 100%; 
+                margin-top: 8px; 
+                margin-left: 0;
+                justify-content: center;
+            }
+            .helper {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .checkbox-helper {
+                margin-left: 0;
+            }
         }
     </style>
 </head>
@@ -125,139 +482,196 @@
 <div class="shell">
     <div class="card">
         <div class="card-header">
-            <div>
-                <h1>AZP-X-Bot (Lokal)</h1>
-                <p class="subtitle">Hesap ekleyin ve mesaj gönderin / Add account & send text.</p>
+            <div class="header-content">
+                <h1>AZP-X-Bot</h1>
+                <p class="subtitle">Add account & send tweets</p>
             </div>
             <div class="badge">Local Only</div>
         </div>
 
         <div class="add-account">
-            <a href="/login" class="btn-primary">➕ Hesap Ekle / Add Account</a>
+            <a href="/login" class="btn-primary">➕ Add Account</a>
         </div>
+
+        <div class="stats-panel">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-label">Registered Accounts</div>
+                <div class="stat-value">{{ total_accounts }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📧</div>
+                <div class="stat-label">With Email</div>
+                <div class="stat-value">{{ accounts_with_email }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🤖</div>
+                <div class="stat-label">Bot Status</div>
+                <div class="stat-value {% if bot_status == 'Active' %}status-active{% else %}status-inactive{% endif %}">
+                    {{ bot_status }}
+                </div>
+            </div>
+        </div>
+
+        {% if webhook_url %}
+        <div class="info-box">
+            <div class="info-box-header">
+                <span style="font-size: 16px;">🌐</span>
+                <strong>Webhook Active</strong>
+            </div>
+            <div style="color: var(--text); margin-top: 8px;">
+                <strong>Webhook URL:</strong>
+                <code>{{ webhook_url }}/webhook/email</code>
+            </div>
+            <div class="info-note">
+                Use this URL in your email service's webhook settings.
+            </div>
+        </div>
+        {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="flash flash-{{ category }}">
-                        <span>{% if category == 'success' %}✓{% elif category == 'error' %}!{% else %}●{% endif %}</span>
+                        <span>{% if category == 'success' %}✓{% elif category == 'error' %}✕{% else %}●{% endif %}</span>
                         <div>{{ message }}</div>
                     </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <div id="genFlash" class="flash flash-error" style="display:none;">
-            <span>!</span>
-            <div id="genFlashMsg"></div>
-        </div>
-
-        <form method="post">
+        <form method="post" id="tweet-form">
             <div class="field">
-                <label for="account">Hesap / Account</label>
-                <select id="account" name="account" {% if not accounts %}disabled{% endif %}>
+                <label for="account">Account</label>
+                <select id="account" name="account" {% if not accounts %}disabled{% endif %} required>
                     {% if accounts %}
-                        <option value="">Hesap seçin / Select account</option>
+                        <option value="">Select account</option>
                         {% for acc in accounts %}
                             <option value="{{ acc.id }}">{{ acc.name }}</option>
                         {% endfor %}
                     {% else %}
-                        <option value="">Hesap bulunamadı</option>
+                        <option value="">No accounts found</option>
                     {% endif %}
                 </select>
                 {% if not accounts %}
-                    <div class="no-accounts">Lütfen önce bir hesap ekleyin / Please add an account first</div>
+                    <div class="no-accounts">⚠️ Please add an account first</div>
                 {% endif %}
             </div>
 
             <div class="field">
-                <label for="text">Mesaj / Text</label>
-                <textarea id="text" name="text" placeholder="Gönderilecek mesajı yazın / Type message..." maxlength="280"></textarea>
-                <div class="helper">Maks 280 karakter / Max 280 chars. Lokal kullanım.</div>
-
-                <!-- NEW: ASIN input + Generate button (right) -->
-                <div class="asin-row">
-                    <input
-                        id="asin"
-                        class="asin-input"
-                        type="text"
-                        placeholder="ASIN (e.g. B00KALEHJE)"
-                        autocomplete="off"
-                    />
-                    <button type="button" id="generateBtn" class="btn-secondary">✨ Tweet Üret / Generate Tweet</button>
+                <label for="text">Message</label>
+                <textarea id="text" name="text" placeholder="Type message or prompt for AI..." maxlength="280" required></textarea>
+                <div class="helper">
+                    <span id="char-count">0</span>/280 chars
+                    <button type="button" id="generate-btn" class="btn-ai">🤖 Generate with AI</button>
                 </div>
+                <div id="ai-status" style="display: none;"></div>
             </div>
 
-            <!-- Clear + Post below on the left -->
+            <div class="field">
+                <div class="checkbox-field">
+                    <input type="checkbox" id="use_ai" name="use_ai">
+                    <label for="use_ai">Generate tweet with AI and send</label>
+                </div>
+                <div class="checkbox-helper">If checked, text above is used as prompt for AI tweet generation</div>
+            </div>
+
             <div class="actions">
-                <button type="reset" class="btn-secondary">Temizle / Clear</button>
-                <button type="submit" class="btn-primary">Gönder / Post</button>
+                <button type="reset" class="btn-secondary">Clear</button>
+                <button type="submit" class="btn-primary">📤 Post</button>
             </div>
         </form>
 
         <div class="footer">
-            <div>.env formatı: X_CLIENT_ID, X_CLIENT_SECRET, X_ACCOUNT*_NAME, X_ACCOUNT*_ACCESS_TOKEN ...</div>
             <div>Flask · Local Only</div>
+            <div>v3.0</div>
         </div>
     </div>
 </div>
-
 <script>
-(function () {
-    const asinInput = document.getElementById("asin");
-    const textArea = document.getElementById("text");
-    const btn = document.getElementById("generateBtn");
-    const genFlash = document.getElementById("genFlash");
-    const genFlashMsg = document.getElementById("genFlashMsg");
-
-    function showGenError(msg) {
-        genFlash.style.display = "flex";
-        genFlashMsg.textContent = msg;
+    // Character counter
+    const textarea = document.getElementById('text');
+    const charCount = document.getElementById('char-count');
+    const generateBtn = document.getElementById('generate-btn');
+    const aiStatus = document.getElementById('ai-status');
+    const charCountElement = document.getElementById('char-count');
+    
+    // Update character count
+    function updateCharCount() {
+        const count = textarea.value.length;
+        charCountElement.textContent = count;
+        
+        // Change color based on character count
+        if (count > 260) {
+            charCountElement.style.color = 'var(--error)';
+        } else if (count > 240) {
+            charCountElement.style.color = 'var(--warning)';
+        } else {
+            charCountElement.style.color = 'var(--muted)';
+        }
     }
-    function clearGenError() {
-        genFlash.style.display = "none";
-        genFlashMsg.textContent = "";
-    }
-
-    btn.addEventListener("click", async () => {
-        clearGenError();
-
-        const asin = (asinInput.value || "").trim();
-        if (!asin) {
-            showGenError("Please enter an ASIN.");
+    
+    textarea.addEventListener('input', updateCharCount);
+    updateCharCount();
+    
+    // AI Text Generation
+    generateBtn.addEventListener('click', async function() {
+        const prompt = textarea.value.trim();
+        
+        if (!prompt) {
+            showAIStatus('Please enter a prompt/text first', 'error');
             return;
         }
-
-        btn.disabled = true;
-        const oldText = btn.textContent;
-        btn.textContent = "⏳ Generating...";
-
+        
+        generateBtn.disabled = true;
+        generateBtn.textContent = '⏳ Generating...';
+        showAIStatus('Generating tweet with AI...', 'loading');
+        
         try {
-            const res = await fetch("/generate_tweet", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ asin })
+            const response = await fetch('/api/generate-text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: prompt })
             });
-
-            const data = await res.json().catch(() => ({}));
-
-            if (!res.ok || !data.ok) {
-                showGenError(data.error || "Failed to generate tweet.");
-                return;
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                textarea.value = data.text;
+                updateCharCount();
+                showAIStatus(`✅ Tweet generated! (${data.text.length} chars)`, 'success');
+            } else {
+                showAIStatus(`❌ Error: ${data.error}`, 'error');
             }
-
-            // Put generated tweet into textarea
-            textArea.value = data.post_text;
-
-        } catch (e) {
-            showGenError("Network/server error while generating tweet.");
+        } catch (error) {
+            showAIStatus(`❌ Connection error: ${error.message}`, 'error');
         } finally {
-            btn.disabled = false;
-            btn.textContent = oldText;
+            generateBtn.disabled = false;
+            generateBtn.textContent = '🤖 Generate with AI';
         }
     });
-})();
+    
+    function showAIStatus(message, type) {
+        aiStatus.style.display = 'block';
+        aiStatus.textContent = message;
+        aiStatus.className = `ai-${type}`;
+        
+        if (type === 'success' || type === 'error') {
+            setTimeout(() => {
+                aiStatus.style.display = 'none';
+            }, 5000);
+        }
+    }
+    
+    // Form reset handler
+    document.querySelector('button[type="reset"]').addEventListener('click', function() {
+        setTimeout(() => {
+            updateCharCount();
+            aiStatus.style.display = 'none';
+        }, 0);
+    });
 </script>
-
 </body>
 </html>
