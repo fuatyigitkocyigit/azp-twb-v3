@@ -316,7 +316,7 @@
         /* Buttons */
         .actions { 
             display: flex; 
-            justify-content: flex-end; 
+            justify-content: space-between; 
             gap: 10px; 
             margin-top: 24px;
             padding-top: 20px;
@@ -325,8 +325,8 @@
         button { 
             border: none; 
             border-radius: 10px; 
-            padding: 10px 20px; 
-            font-size: 13px; 
+            padding: 12px 24px; 
+            font-size: 14px; 
             font-weight: 500;
             cursor: pointer; 
             display: inline-flex; 
@@ -363,10 +363,13 @@
             background: rgba(139, 92, 246, 0.2); 
             color: #a78bfa; 
             border: 1px solid rgba(139, 92, 246, 0.4);
-            padding: 6px 12px;
-            font-size: 11px;
+            padding: 12px 20px;
+            font-size: 14px;
             margin: 0;
             font-weight: 500;
+            width: 100%;
+            justify-content: center;
+            text-align: center;
         }
         .btn-ai:hover { 
             background: rgba(139, 92, 246, 0.3); 
@@ -559,32 +562,34 @@
             </div>
 
             <div class="field">
+                <label for="amazon_url">Amazon URL veya ASIN (Optional)</label>
+                <input type="text" id="amazon_url" name="amazon_url" placeholder="https://www.amazon.com/dp/... veya B0863DW238" />
+                <div class="helper" style="margin-top: 6px;">
+                    <span style="font-size: 11px; color: var(--muted);">Amazon linki veya ASIN numarası girin. AI ürün bilgilerini kullanacak.</span>
+                </div>
+            </div>
+
+            <div class="field">
                 <label for="text">Message</label>
                 <textarea id="text" name="text" placeholder="Type message or prompt for AI..." maxlength="280" required></textarea>
                 <div class="helper">
                     <span id="char-count">0</span>/280 chars
-                    <button type="button" id="generate-btn" class="btn-ai">🤖 Generate with AI</button>
+                </div>
+                <div style="margin-top: 12px;">
+                    <button type="button" id="generate-btn" class="btn-ai" style="width: 100%; padding: 12px 20px; font-size: 14px;">🤖 Generate with AI</button>
                 </div>
                 <div id="ai-status" style="display: none;"></div>
             </div>
 
-            <div class="field">
-                <div class="checkbox-field">
-                    <input type="checkbox" id="use_ai" name="use_ai">
-                    <label for="use_ai">Generate tweet with AI and send</label>
-                </div>
-                <div class="checkbox-helper">If checked, text above is used as prompt for AI tweet generation</div>
-            </div>
-
             <div class="actions">
                 <button type="reset" class="btn-secondary">Clear</button>
-                <button type="submit" class="btn-primary">📤 Post</button>
+                <button type="submit" id="post-btn" class="btn-primary">📤 Post</button>
             </div>
         </form>
 
         <div class="footer">
             <div>Flask · Local Only</div>
-            <div>v3.0</div>
+            <div>v3.2</div>
         </div>
     </div>
 </div>
@@ -615,26 +620,57 @@
     updateCharCount();
     
     // AI Text Generation
+    const postBtn = document.getElementById('post-btn');
+    
     generateBtn.addEventListener('click', async function() {
         const prompt = textarea.value.trim();
+        const amazonInput = document.getElementById('amazon_url').value.trim();
         
-        if (!prompt) {
-            showAIStatus('Please enter a prompt/text first', 'error');
+        if (!prompt && !amazonInput) {
+            showAIStatus('Please enter a prompt/text or Amazon URL/ASIN first', 'error');
             return;
         }
         
         generateBtn.disabled = true;
         generateBtn.textContent = '⏳ Generating...';
+        postBtn.disabled = true; // Block post button while generating
         showAIStatus('Generating tweet with AI...', 'loading');
         
         try {
+            const payload = {};
+            if (prompt) {
+                payload.prompt = prompt;
+            }
+            
+            // Check if input is ASIN (10 alphanumeric characters) or URL
+            if (amazonInput) {
+                const asinPattern = /^[A-Z0-9]{10}$/;
+                if (asinPattern.test(amazonInput.toUpperCase())) {
+                    // It's an ASIN
+                    payload.asin = amazonInput.toUpperCase();
+                } else if (amazonInput.startsWith('http')) {
+                    // It's a URL - pass both as amazon_url (for ASIN extraction) and as user_provided_url
+                    payload.amazon_url = amazonInput;
+                    payload.user_provided_url = amazonInput; // This will be used in the tweet
+                } else {
+                    // Try to treat as URL anyway
+                    payload.amazon_url = amazonInput;
+                    payload.user_provided_url = amazonInput;
+                }
+            }
+            
             const response = await fetch('/api/generate-text', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ prompt: prompt })
+                body: JSON.stringify(payload)
             });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
             
             const data = await response.json();
             
@@ -650,6 +686,7 @@
         } finally {
             generateBtn.disabled = false;
             generateBtn.textContent = '🤖 Generate with AI';
+            postBtn.disabled = false; // Unblock post button
         }
     });
     

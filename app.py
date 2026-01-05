@@ -5,11 +5,12 @@ import time
 import secrets
 import hashlib
 import requests
+import re
 from flask import Flask, redirect, request, render_template, flash, session
 from dotenv import load_dotenv
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qs
 from flask import jsonify
-from get_description import generate_post_text_for_asin
+from get_description import generate_post_text_for_asin, generate_tweet_from_prompt
 
 
 load_dotenv()
@@ -29,6 +30,67 @@ TWEET_URL = "https://api.twitter.com/2/tweets"
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 
+API_KEY = os.getenv("API_KEY", "azxtwbkey")  # API key for authentication
+
+# ---------------- ASIN EXTRACTION ---------------- 
+def extract_asin_from_url(amazon_url: str) -> str:
+    """
+    Extracts ASIN from various Amazon URL formats.
+    Examples:
+    - https://www.amazon.com/dp/B0863DW238
+    - https://www.amazon.com/product-name/dp/B0863DW238/ref=...
+    - https://www.amazon.com/gp/product/B0863DW238
+    """
+    if not amazon_url:
+        raise ValueError("Amazon URL is required")
+    
+    amazon_url = amazon_url.strip()
+    
+    # Pattern 1: /dp/ASIN or /product/ASIN
+    patterns = [
+        r'/dp/([A-Z0-9]{10})',  # /dp/B0863DW238
+        r'/gp/product/([A-Z0-9]{10})',  # /gp/product/B0863DW238
+        r'/product/([A-Z0-9]{10})',  # /product/B0863DW238
+        r'/dp/([A-Z0-9]{10})/',  # /dp/B0863DW238/
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, amazon_url)
+        if match:
+            asin = match.group(1)
+            if len(asin) == 10:
+                return asin
+    
+    # Pattern 2: Check query parameters
+    parsed = urlparse(amazon_url)
+    query_params = parse_qs(parsed.query)
+    
+    # Some URLs have ASIN in query params
+    if 'asin' in query_params:
+        asin = query_params['asin'][0]
+        if len(asin) == 10:
+            return asin
+    
+    raise ValueError(f"Could not extract ASIN from URL: {amazon_url}")
+
+# ---------------- FIND USER BY EMAIL ---------------- 
+def find_user_by_email(email: str):
+    """Find user ID by email address."""
+    email = email.strip().lower()
+    for user_id, user_data in USERS.items():
+        user_email = (user_data.get("email") or "").strip().lower()
+        if user_email == email:
+            return user_id, user_data
+    return None, None
+
+# ---------------- API KEY AUTHENTICATION ---------------- 
+def check_api_key():
+    """Check if API key is valid."""
+    api_key = request.headers.get("X-API-Key")
+    if not api_key or api_key != API_KEY:
+        return False
+    return True
+
 @app.route("/generate_tweet", methods=["POST"])
 def generate_tweet():
     data = request.get_json(silent=True) or {}
@@ -41,6 +103,125 @@ def generate_tweet():
         return jsonify({"ok": True, "post_text": post_text})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
+
+@app.route("/api/generate-text", methods=["POST"])
+def generate_text():
+    """
+    Endpoint for UI to generate tweet text from prompt.
+    Expects JSON: {"prompt": "...", "amazon_url": "...", "asin": "..."} (all optional but at least one required)
+    Returns: {"success": bool, "text": "...", "error": "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    amazon_url = (data.get("amazon_url") or "").strip()
+    asin = (data.get("asin") or "").strip()
+    user_provided_url = (data.get("user_provided_url") or "").strip()
+    
+    if not prompt and not amazon_url and not asin:
+        return jsonify({
+            "success": False,
+            "error": "Either prompt, amazon_url, or asin is required"
+        }), 400
+    
+    try:
+        # Use user_provided_url if explicitly provided, otherwise use amazon_url if it's a URL
+        final_user_url = user_provided_url if user_provided_url else (amazon_url if amazon_url.startswith('http') else None)
+        
+        tweet_text = generate_tweet_from_prompt(
+            prompt if prompt else "",
+            amazon_url if amazon_url and amazon_url.startswith('http') else None,
+            asin if asin else None,
+            user_provided_url=final_user_url
+        )
+        return jsonify({
+            "success": True,
+            "text": tweet_text
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route("/api/post-amazon", methods=["POST"])
+def post_amazon_product():
+    """
+    Endpoint for automatic Amazon product posting.
+    Expects JSON: {"email": "...", "amazon_url": "..."}
+    Returns: {"success": bool, "message": "...", "tweet_id": "...", "post_text": "..."}
+    """
+    # Check API key
+    if not check_api_key():
+        return jsonify({
+            "success": False,
+            "message": "Invalid or missing API key"
+        }), 401
+    
+    # Get request data
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    amazon_url = (data.get("amazon_url") or "").strip()
+    
+    # Validate input
+    if not email:
+        return jsonify({
+            "success": False,
+            "message": "Email is required"
+        }), 400
+    
+    if not amazon_url:
+        return jsonify({
+            "success": False,
+            "message": "Amazon URL is required"
+        }), 400
+    
+    try:
+        # Extract ASIN from URL
+        asin = extract_asin_from_url(amazon_url)
+        
+        # Find user by email
+        user_id, user_data = find_user_by_email(email)
+        if not user_id:
+            return jsonify({
+                "success": False,
+                "message": f"User with email '{email}' not found. Please login first."
+            }), 404
+        
+        # Generate tweet content using AI (use the provided URL from user)
+        post_text = generate_post_text_for_asin(asin, user_provided_url=amazon_url)
+        
+        # Post tweet
+        success, message, tweet_id = post_tweet_v2(user_id, post_text)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Tweet posted successfully",
+                "tweet_id": tweet_id,
+                "post_text": post_text,
+                "asin": asin,
+                "email": email,
+                "username": user_data.get("username", "unknown")
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"Failed to post tweet: {message}",
+                "asin": asin,
+                "email": email,
+                "post_text": post_text
+            }), 500
+            
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }), 500
 
 # ------------------ USERS ------------------
 if os.path.exists(TOKEN_FILE):
@@ -213,12 +394,12 @@ def refresh_token_if_needed(user_id: str):
 def post_tweet_v2(user_id, text):
     user = USERS.get(user_id)
     if not user:
-        return False, "User not found"
+        return False, "User not found", None
 
     try:
         refresh_token_if_needed(user_id)
     except Exception as e:
-        return False, f"Token refresh error: {e}"
+        return False, f"Token refresh error: {e}", None
 
     headers = {
         "Authorization": f"Bearer {USERS[user_id]['access_token']}",
@@ -230,8 +411,13 @@ def post_tweet_v2(user_id, text):
 
     # Some clients return 201, some return 200
     if resp.status_code in (200, 201):
-        return True, "Tweet posted"
-    return False, f"{resp.status_code} {resp.text}"
+        try:
+            response_data = resp.json()
+            tweet_id = response_data.get("data", {}).get("id")
+            return True, "Tweet posted", tweet_id
+        except:
+            return True, "Tweet posted", None
+    return False, f"{resp.status_code} {resp.text}", None
 
 # ---------------- UI ----------------
 @app.route("/", methods=["GET", "POST"])
@@ -250,7 +436,7 @@ def index():
         if not user_id or not text:
             flash("Please select account & enter text", "error")
         else:
-            ok, msg = post_tweet_v2(user_id, text)
+            ok, msg, _ = post_tweet_v2(user_id, text)
             flash(msg, "success" if ok else "error")
 
     return render_template("index.html", 

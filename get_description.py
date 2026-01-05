@@ -288,15 +288,287 @@ Generate tweet content with EXACTLY 2 category hashtags."""
 
 
 # =========================================================
+# Generate Tweet from Prompt (for UI)
+# =========================================================
+def generate_tweet_from_prompt(prompt: str, amazon_url: str = None, asin: str = None, user_provided_url: str = None) -> str:
+    """
+    Generate a tweet from a user prompt, optionally with Amazon product info.
+    If amazon_url or asin is provided, gets product info and combines with prompt.
+    Otherwise, generates a simple tweet from the prompt.
+    
+    Args:
+        prompt: User's text prompt
+        amazon_url: Amazon URL (for extracting ASIN)
+        asin: Direct ASIN number
+        user_provided_url: User's provided URL to use in tweet (if provided, this will be used instead of affiliate URL)
+    
+    Returns tweet text (max 280 chars) with hashtags.
+    """
+    import re
+    from urllib.parse import urlparse, parse_qs
+    
+    # Extract ASIN from URL if provided
+    extracted_asin = None
+    if amazon_url:
+        try:
+            asin_pattern = r'/dp/([A-Z0-9]{10})|/gp/product/([A-Z0-9]{10})|/product/([A-Z0-9]{10})'
+            match = re.search(asin_pattern, amazon_url)
+            if match:
+                extracted_asin = match.group(1) or match.group(2) or match.group(3)
+            
+            if not extracted_asin:
+                parsed = urlparse(amazon_url)
+                query_params = parse_qs(parsed.query)
+                if 'asin' in query_params:
+                    extracted_asin = query_params['asin'][0]
+        except Exception as e:
+            logger.warning(f"Failed to extract ASIN from URL: {e}")
+    
+    # Use provided ASIN or extracted ASIN
+    final_asin = asin or extracted_asin
+    
+    # If we have ASIN, get product info and enhance with prompt
+    if final_asin and len(final_asin) == 10:
+        try:
+            access = os.getenv("AMAZON_ACCESS_KEY")
+            secret = os.getenv("AMAZON_SECRET_KEY")
+            tag = os.getenv("AMAZON_ASSOC_TAG")
+            
+            if access and secret and tag:
+                amazon = AmazonApiHelper(access_key=access, secret_key=secret, associate_tag=tag)
+                item = amazon.get_item_info(final_asin)
+                title = item.get("title") or ""
+                features = item.get("features") or []
+                # Use user provided URL if available, otherwise create simple ASIN-only link
+                if user_provided_url:
+                    final_url = user_provided_url
+                else:
+                    # Simple link with only ASIN, no affiliate tags or parameters
+                    final_url = f"https://www.amazon.com/dp/{final_asin}"
+                
+                if title:
+                    config = get_azure_client()
+                    
+                    # Always create enhanced, longer tweet when ASIN is provided
+                    # Use prompt if available, otherwise create detailed product tweet
+                    if prompt:
+                        user_context = f"\n\nUser's emphasis/context: {prompt}"
+                    else:
+                        user_context = ""
+                    
+                    # Create detailed product description
+                    product_info = f"Product: {title}\n\nKey Features:\n"
+                    product_info += "\n".join([f"- {f}" for f in features[:6] if f])
+                    product_info += user_context
+                    
+                    # Enhanced system prompt for longer, more engaging tweets
+                    system_prompt = """You write engaging, persuasive promotional tweets for X (Twitter).
+
+STRICT OUTPUT RULES:
+- Return JSON only, matching the provided schema.
+- description: 20-25 words (not too short!), benefit-focused, salesy, human tone, engaging.
+- Focus on benefits, value, and why someone should care.
+- NO brand names, product codes, ASIN numbers, or model numbers in description.
+- hashtags: exactly 2, lowercase, one word each, must start with #, broad category/lifestyle tags.
+- hashtags must be different.
+"""
+                    
+                    user_prompt = f"""{product_info}
+
+Create an engaging, detailed promotional tweet (20-25 words) that highlights the product benefits and value.{user_context if prompt else ""}"""
+                    
+                    # Category hints
+                    CATEGORY_HINTS = {
+                        "dvd": "tech", "disc": "office", "camera": "tech", "microphone": "tech",
+                        "keyboard": "tech", "mouse": "tech", "monitor": "tech", "lamp": "home",
+                        "pillow": "home", "shirt": "fashion", "toy": "kids", "pet": "pet",
+                        "garden": "garden", "fitness": "fitness", "supplement": "wellness", "bag": "travel",
+                    }
+                    
+                    category_hint = ""
+                    tl = (title or "").lower()
+                    for word, cat in CATEGORY_HINTS.items():
+                        if word in tl:
+                            category_hint = cat
+                            break
+                    
+                    if category_hint:
+                        user_prompt += f"\nTry to align hashtags with theme: {category_hint}"
+                    
+                    try:
+                        resp = config.client.chat.completions.create(
+                            model=config.deployment,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            response_format={
+                                "type": "json_schema",
+                                "json_schema": {
+                                    "name": "tweet_content",
+                                    "strict": True,
+                                    "schema": TWEET_SCHEMA,
+                                },
+                            },
+                            temperature=0.7,
+                            top_p=0.9,
+                            max_completion_tokens=250,
+                        )
+                        
+                        raw = (resp.choices[0].message.content or "").strip()
+                        data = json.loads(raw)
+                        
+                        desc = (data.get("description") or "").strip()
+                        hashtag1 = (data.get("hashtag1") or "").strip().lower()
+                        hashtag2 = (data.get("hashtag2") or "").strip().lower()
+                        
+                        if not desc or not hashtag1 or not hashtag2:
+                            raise ValueError("Incomplete AI response")
+                        
+                        if not hashtag1.startswith("#"):
+                            hashtag1 = f"#{hashtag1}"
+                        if not hashtag2.startswith("#"):
+                            hashtag2 = f"#{hashtag2}"
+                        if hashtag1 == hashtag2:
+                            hashtag2 = "#lifestyle"
+                        
+                        # Ensure 20-25 words (not too short!)
+                        words = desc.split()
+                        if len(words) < 15:
+                            # If too short, try to expand - but this shouldn't happen with the new prompt
+                            pass  # Keep as is, the prompt should ensure 20-25 words
+                        elif len(words) > 25:
+                            desc = " ".join(words[:25])
+                        
+                        tags = ["#amazon", hashtag1, hashtag2]
+                        tags_str = " ".join(tags)
+                        
+                        # Build tweet and ensure it's under 280 characters
+                        tweet_text = f"{desc}\n{final_url}\n{tags_str}"
+                        
+                        # If over 280, truncate description
+                        if len(tweet_text) > 280:
+                            url_and_tags_len = len(f"\n{final_url}\n{tags_str}")
+                            max_desc_len = 280 - url_and_tags_len
+                            if max_desc_len > 0:
+                                words = desc.split()
+                                truncated_desc = ""
+                                for word in words:
+                                    if len(truncated_desc + " " + word) <= max_desc_len:
+                                        truncated_desc += (" " if truncated_desc else "") + word
+                                    else:
+                                        break
+                                if truncated_desc:
+                                    desc = truncated_desc
+                                else:
+                                    # If even one word doesn't fit, use first few chars
+                                    desc = desc[:max_desc_len].rsplit(' ', 1)[0] if ' ' in desc[:max_desc_len] else desc[:max_desc_len-3] + "..."
+                            tweet_text = f"{desc}\n{final_url}\n{tags_str}"
+                        
+                        return tweet_text
+                    except Exception as e:
+                        logger.warning(f"Enhanced tweet generation failed: {e}")
+                        # Fall back to standard generation
+                        return generate_post_text_for_asin(final_asin)
+        except Exception as e:
+            logger.warning(f"Failed to get Amazon product info: {e}")
+            # Fall through to prompt-based generation
+    
+    # Generate simple tweet from prompt
+    config = get_azure_client()
+    
+    system_prompt = """You write engaging, concise tweets for X (Twitter).
+
+STRICT OUTPUT RULES:
+- Return JSON only, matching the provided schema.
+- description: maximum 25 words, engaging, natural tone, relevant to the prompt.
+- hashtags: exactly 2, lowercase, one word each, must start with #, relevant to the content.
+- hashtags must be different.
+- Do NOT include product codes, ASIN numbers, or model numbers.
+"""
+    
+    user_prompt = f"""Create an engaging tweet based on this prompt: {prompt}
+
+Generate tweet content with EXACTLY 2 relevant hashtags."""
+    
+    for attempt in range(1, 4):
+        try:
+            resp = config.client.chat.completions.create(
+                model=config.deployment,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "tweet_content",
+                        "strict": True,
+                        "schema": TWEET_SCHEMA,
+                    },
+                },
+                temperature=0.7,
+                top_p=0.9,
+                max_completion_tokens=250,
+            )
+            
+            raw = (resp.choices[0].message.content or "").strip()
+            data = json.loads(raw)
+            
+            desc = (data.get("description") or "").strip()
+            hashtag1 = (data.get("hashtag1") or "").strip().lower()
+            hashtag2 = (data.get("hashtag2") or "").strip().lower()
+            
+            if not desc or not hashtag1 or not hashtag2:
+                raise ValueError("Incomplete AI response")
+            
+            if not hashtag1.startswith("#"):
+                hashtag1 = f"#{hashtag1}"
+            if not hashtag2.startswith("#"):
+                hashtag2 = f"#{hashtag2}"
+            if hashtag1 == hashtag2:
+                hashtag2 = "#lifestyle"
+            
+            # Enforce 25 words max
+            words = desc.split()
+            if len(words) > 25:
+                desc = " ".join(words[:25])
+            
+            # Combine description and hashtags
+            tweet_text = f"{desc}\n{hashtag1} {hashtag2}"
+            
+            # Ensure total length is under 280
+            if len(tweet_text) > 280:
+                max_desc_len = 280 - len(f"\n{hashtag1} {hashtag2}")
+                if max_desc_len > 0:
+                    desc = desc[:max_desc_len].rsplit(' ', 1)[0]
+                    tweet_text = f"{desc}\n{hashtag1} {hashtag2}"
+            
+            return tweet_text
+            
+        except Exception as e:
+            logger.warning(f"Azure OpenAI attempt {attempt} failed: {e}")
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+    
+    # fallback
+    return f"{prompt[:200]}\n#lifestyle #inspiration"
+
+
+# =========================================================
 # Public function you will call from main.py
 # =========================================================
-def generate_post_text_for_asin(asin: str) -> str:
+def generate_post_text_for_asin(asin: str, user_provided_url: str = None) -> str:
     """
     Returns the final tweet text string:
 
     <description>
-    <affiliate_url>
+    <affiliate_url or user_provided_url>
     #amazon <tag1> <tag2>
+    
+    Args:
+        asin: Amazon ASIN number
+        user_provided_url: User's provided URL to use instead of affiliate URL
     """
     asin = (asin or "").strip()
     if not asin:
@@ -314,7 +586,12 @@ def generate_post_text_for_asin(asin: str) -> str:
     item = amazon.get_item_info(asin)
     title = item.get("title") or ""
     features = item.get("features") or []
-    affiliate_url = item.get("url") or f"https://www.amazon.com/dp/{asin}"
+    # Use user provided URL if available, otherwise create simple ASIN-only link
+    if user_provided_url:
+        final_url = user_provided_url
+    else:
+        # Simple link with only ASIN, no affiliate tags or parameters
+        final_url = f"https://www.amazon.com/dp/{asin}"
 
     if not title:
         raise RuntimeError(f"PA-API returned empty title for ASIN {asin}")
@@ -325,7 +602,28 @@ def generate_post_text_for_asin(asin: str) -> str:
     tags = ["#amazon"] + ai["hashtags"]
     tags_str = " ".join(tags)
 
-    post_text = f"{ai['description']}\n{affiliate_url}\n{tags_str}\n"
+    # Build tweet and ensure it's under 280 characters
+    post_text = f"{ai['description']}\n{final_url}\n{tags_str}"
+    
+    # If over 280, truncate description
+    if len(post_text) > 280:
+        url_and_tags_len = len(f"\n{final_url}\n{tags_str}")
+        max_desc_len = 280 - url_and_tags_len
+        if max_desc_len > 0:
+            words = ai['description'].split()
+            truncated_desc = ""
+            for word in words:
+                if len(truncated_desc + " " + word) <= max_desc_len:
+                    truncated_desc += (" " if truncated_desc else "") + word
+                else:
+                    break
+            if truncated_desc:
+                ai['description'] = truncated_desc
+            else:
+                # If even one word doesn't fit, use first few chars
+                ai['description'] = ai['description'][:max_desc_len-3] + "..."
+        post_text = f"{ai['description']}\n{final_url}\n{tags_str}"
+    
     return post_text
 
 
