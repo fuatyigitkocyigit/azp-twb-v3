@@ -503,9 +503,9 @@
                 <div class="stat-value">{{ total_accounts }}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">📧</div>
-                <div class="stat-label">With Email</div>
-                <div class="stat-value">{{ accounts_with_email }}</div>
+                <div class="stat-icon">📊</div>
+                <div class="stat-label">Last 1 Hour</div>
+                <div class="stat-value" id="successful-tweets-count">{{ successful_tweets_last_hour }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">🤖</div>
@@ -562,10 +562,10 @@
             </div>
 
             <div class="field">
-                <label for="amazon_url">Amazon URL veya ASIN (Optional)</label>
-                <input type="text" id="amazon_url" name="amazon_url" placeholder="https://www.amazon.com/dp/... veya B0863DW238" />
+                <label for="amazon_url">Amazon URL or ASIN (Optional)</label>
+                <input type="text" id="amazon_url" name="amazon_url" placeholder="https://www.amazon.com/dp/... or B0863DW238" />
                 <div class="helper" style="margin-top: 6px;">
-                    <span style="font-size: 11px; color: var(--muted);">Amazon linki veya ASIN numarası girin. AI ürün bilgilerini kullanacak.</span>
+                    <span style="font-size: 11px; color: var(--muted);">Enter Amazon link or ASIN number. AI will use product information.</span>
                 </div>
             </div>
 
@@ -708,6 +708,96 @@
             updateCharCount();
             aiStatus.style.display = 'none';
         }, 0);
+    });
+    
+    // Form submit handler - AJAX
+    const tweetForm = document.getElementById('tweet-form');
+    const successfulTweetsCount = document.getElementById('successful-tweets-count');
+    
+    function showFlashMessage(message, type) {
+        // Remove existing flash messages
+        const existingFlashes = document.querySelectorAll('.flash');
+        existingFlashes.forEach(flash => flash.remove());
+        
+        // Create new flash message
+        const flashDiv = document.createElement('div');
+        flashDiv.className = `flash flash-${type}`;
+        flashDiv.innerHTML = `
+            <span>${type === 'success' ? '✓' : '✕'}</span>
+            <div>${message}</div>
+        `;
+        
+        // Insert before form
+        tweetForm.parentNode.insertBefore(flashDiv, tweetForm);
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            flashDiv.remove();
+        }, 5000);
+    }
+    
+    function updateTweetCount(newCount) {
+        if (successfulTweetsCount) {
+            successfulTweetsCount.textContent = newCount;
+            // Add a subtle animation
+            successfulTweetsCount.style.transform = 'scale(1.1)';
+            successfulTweetsCount.style.transition = 'transform 0.2s ease';
+            setTimeout(() => {
+                successfulTweetsCount.style.transform = 'scale(1)';
+            }, 200);
+        }
+    }
+    
+    tweetForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const accountSelect = document.getElementById('account');
+        const textInput = document.getElementById('text');
+        
+        const account = accountSelect.value;
+        const text = textInput.value.trim();
+        
+        if (!account || !text) {
+            showFlashMessage('Please select account & enter text', 'error');
+            return;
+        }
+        
+        // Disable submit button
+        postBtn.disabled = true;
+        postBtn.textContent = '⏳ Posting...';
+        
+        try {
+            const response = await fetch('/api/post-tweet', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    account: account,
+                    text: text
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showFlashMessage(data.message || 'Tweet posted successfully', 'success');
+                // Update the count
+                if (data.successful_tweets_last_hour !== undefined) {
+                    updateTweetCount(data.successful_tweets_last_hour);
+                }
+                // Clear form
+                tweetForm.reset();
+                updateCharCount();
+            } else {
+                showFlashMessage(data.message || 'Failed to post tweet', 'error');
+            }
+        } catch (error) {
+            showFlashMessage(`Connection error: ${error.message}`, 'error');
+        } finally {
+            postBtn.disabled = false;
+            postBtn.textContent = '📤 Post';
+        }
     });
 </script>
 </body>

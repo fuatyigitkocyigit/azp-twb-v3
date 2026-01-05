@@ -1,6 +1,6 @@
 ## X (Twitter) Lokal Bot Paneli
 
-Basit bir Flask uygulaması ile `.env` içindeki birden fazla X hesabından birini seçip lokal web arayüzü üzerinden tweet atmanızı sağlar.
+Flask uygulaması ile `.env` içindeki birden fazla X hesabından birini seçip web arayüzü üzerinden tweet atmanızı sağlar.
 
 ### 1. Kurulum / Setup
 

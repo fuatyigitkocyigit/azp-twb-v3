@@ -6,6 +6,7 @@ import secrets
 import hashlib
 import requests
 import re
+from datetime import datetime, timedelta
 from flask import Flask, redirect, request, render_template, flash, session
 from dotenv import load_dotenv
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -20,7 +21,8 @@ CLIENT_SECRET = os.getenv("X_CLIENT_SECRET")
 CALLBACK_URL = os.getenv("CALLBACK_URL")
 SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
 
-TOKEN_FILE = "users.json"  # Lokal token dosyası
+TOKEN_FILE = "users.json"  # Local token file
+TWEETS_LOG_FILE = "tweets_log.json"  # File to log successful tweets
 
 AUTH_URL = "https://twitter.com/i/oauth2/authorize"
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
@@ -234,6 +236,42 @@ def save_users():
     with open(TOKEN_FILE, "w", encoding="utf-8") as f:
         json.dump(USERS, f, ensure_ascii=False, indent=4)
 
+# ---------------- TWEETS LOG ---------------- 
+def load_tweets_log():
+    """Load tweets log from file."""
+    if os.path.exists(TWEETS_LOG_FILE):
+        try:
+            with open(TWEETS_LOG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_tweets_log(tweets_log):
+    """Save tweets log to file."""
+    with open(TWEETS_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(tweets_log, f, ensure_ascii=False, indent=2)
+
+def log_successful_tweet(user_id, tweet_id=None):
+    """Log a successful tweet post."""
+    tweets_log = load_tweets_log()
+    tweets_log.append({
+        "timestamp": time.time(),
+        "user_id": user_id,
+        "tweet_id": tweet_id
+    })
+    # Keep only last 1000 entries to prevent file from growing too large
+    if len(tweets_log) > 1000:
+        tweets_log = tweets_log[-1000:]
+    save_tweets_log(tweets_log)
+
+def get_successful_tweets_last_hour():
+    """Get count of successful tweets in the last hour."""
+    tweets_log = load_tweets_log()
+    one_hour_ago = time.time() - 3600  # 1 hour in seconds
+    count = sum(1 for tweet in tweets_log if tweet.get("timestamp", 0) >= one_hour_ago)
+    return count
+
 # ---------------- PKCE HELPERS ----------------
 def make_pkce_pair():
     """
@@ -414,22 +452,70 @@ def post_tweet_v2(user_id, text):
         try:
             response_data = resp.json()
             tweet_id = response_data.get("data", {}).get("id")
+            # Log successful tweet
+            log_successful_tweet(user_id, tweet_id)
             return True, "Tweet posted", tweet_id
         except:
+            # Log successful tweet even if we can't parse tweet_id
+            log_successful_tweet(user_id, None)
             return True, "Tweet posted", None
     return False, f"{resp.status_code} {resp.text}", None
 
-# ---------------- UI ----------------
+# ---------------- API ENDPOINTS ---------------- 
+@app.route("/api/post-tweet", methods=["POST"])
+def api_post_tweet():
+    """API endpoint for posting tweets via AJAX."""
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("account", "").strip()
+    text = (data.get("text") or "").strip()
+
+    if not user_id or not text:
+        return jsonify({
+            "success": False,
+            "message": "Please select account & enter text"
+        }), 400
+
+    ok, msg, tweet_id = post_tweet_v2(user_id, text)
+    
+    # Get updated stats
+    successful_tweets_last_hour = get_successful_tweets_last_hour()
+    
+    return jsonify({
+        "success": ok,
+        "message": msg,
+        "tweet_id": tweet_id,
+        "successful_tweets_last_hour": successful_tweets_last_hour
+    }), 200 if ok else 500
+
+@app.route("/api/stats", methods=["GET"])
+def api_stats():
+    """API endpoint to get current statistics."""
+    successful_tweets_last_hour = get_successful_tweets_last_hour()
+    total_accounts = len(USERS)
+    bot_status = "Active" if total_accounts > 0 else "Inactive"
+    
+    return jsonify({
+        "successful_tweets_last_hour": successful_tweets_last_hour,
+        "total_accounts": total_accounts,
+        "bot_status": bot_status
+    }), 200
+
+# ---------------- UI ---------------- 
 @app.route("/", methods=["GET", "POST"])
 def index():
     accounts = [{"id": uid, "name": u.get("username", uid)} for uid, u in USERS.items()]
     
     # Statistics
     total_accounts = len(USERS)
-    accounts_with_email = sum(1 for u in USERS.values() if u.get("email"))
+    successful_tweets_last_hour = get_successful_tweets_last_hour()
     bot_status = "Active" if total_accounts > 0 else "Inactive"
 
     if request.method == "POST":
+        # Check if it's an AJAX request
+        if request.headers.get("Content-Type") == "application/json":
+            return api_post_tweet()
+        
+        # Regular form submission (fallback)
         user_id = request.form.get("account")
         text = (request.form.get("text") or "").strip()
 
@@ -442,7 +528,7 @@ def index():
     return render_template("index.html", 
                          accounts=accounts,
                          total_accounts=total_accounts,
-                         accounts_with_email=accounts_with_email,
+                         successful_tweets_last_hour=successful_tweets_last_hour,
                          bot_status=bot_status)
 
 # ---------------- EMAIL ENTRY ---------------- 
