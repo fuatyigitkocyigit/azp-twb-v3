@@ -152,26 +152,52 @@ def post_amazon_product():
     Expects JSON: {"email": "...", "amazon_url": "..."}
     Returns: {"success": bool, "message": "...", "tweet_id": "...", "post_text": "..."}
     """
+    # Get request data early for logging
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    amazon_url = (data.get("amazon_url") or "").strip()
+    
     # Check API key
     if not check_api_key():
+        # Log failed API key attempt
+        asin_attempt = None
+        try:
+            if amazon_url:
+                asin_attempt = extract_asin_from_url(amazon_url)
+        except:
+            pass
+        log_tweet_attempt(
+            user_id=None,
+            success=False,
+            asin=asin_attempt,
+            error_message="Invalid or missing API key",
+            endpoint="/api/post-amazon"
+        )
         return jsonify({
             "success": False,
             "message": "Invalid or missing API key"
         }), 401
     
-    # Get request data
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
-    amazon_url = (data.get("amazon_url") or "").strip()
-    
     # Validate input
     if not email:
+        log_tweet_attempt(
+            user_id=None,
+            success=False,
+            error_message="Email is required",
+            endpoint="/api/post-amazon"
+        )
         return jsonify({
             "success": False,
             "message": "Email is required"
         }), 400
     
     if not amazon_url:
+        log_tweet_attempt(
+            user_id=None,
+            success=False,
+            error_message="Amazon URL is required",
+            endpoint="/api/post-amazon"
+        )
         return jsonify({
             "success": False,
             "message": "Amazon URL is required"
@@ -184,6 +210,14 @@ def post_amazon_product():
         # Find user by email
         user_id, user_data = find_user_by_email(email)
         if not user_id:
+            # Log user not found error
+            log_tweet_attempt(
+                user_id=None,
+                success=False,
+                asin=asin,
+                error_message=f"User with email '{email}' not found. Please login first.",
+                endpoint="/api/post-amazon"
+            )
             return jsonify({
                 "success": False,
                 "message": f"User with email '{email}' not found. Please login first."
@@ -192,8 +226,8 @@ def post_amazon_product():
         # Generate tweet content using AI (use the provided URL from user)
         post_text = generate_post_text_for_asin(asin, user_provided_url=amazon_url)
         
-        # Post tweet
-        success, message, tweet_id = post_tweet_v2(user_id, post_text)
+        # Post tweet with ASIN for logging
+        success, message, tweet_id = post_tweet_v2(user_id, post_text, asin=asin)
         
         if success:
             return jsonify({
@@ -215,11 +249,27 @@ def post_amazon_product():
             }), 500
             
     except ValueError as e:
+        # Log validation errors
+        log_tweet_attempt(
+            user_id=None,
+            success=False,
+            asin=None,
+            error_message=f"Validation error: {str(e)}",
+            endpoint="/api/post-amazon"
+        )
         return jsonify({
             "success": False,
             "message": str(e)
         }), 400
     except Exception as e:
+        # Log unexpected errors
+        log_tweet_attempt(
+            user_id=None,
+            success=False,
+            asin=None,
+            error_message=f"Unexpected error: {str(e)}",
+            endpoint="/api/post-amazon"
+        )
         return jsonify({
             "success": False,
             "message": f"Error: {str(e)}"
@@ -252,24 +302,45 @@ def save_tweets_log(tweets_log):
     with open(TWEETS_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(tweets_log, f, ensure_ascii=False, indent=2)
 
-def log_successful_tweet(user_id, tweet_id=None):
-    """Log a successful tweet post."""
+def log_tweet_attempt(user_id=None, success=True, tweet_id=None, asin=None, error_message=None, endpoint=None):
+    """Log a tweet attempt (successful or failed)."""
     tweets_log = load_tweets_log()
-    tweets_log.append({
-        "timestamp": time.time(),
+    current_time = time.time()
+    log_entry = {
+        "timestamp": current_time,
+        "date": datetime.fromtimestamp(current_time).strftime("%Y-%m-%d %H:%M:%S"),
+        "success": success,
         "user_id": user_id,
         "tweet_id": tweet_id
-    })
+    }
+    # Add ASIN if provided
+    if asin:
+        log_entry["asin"] = asin
+    # Add endpoint if provided
+    if endpoint:
+        log_entry["endpoint"] = endpoint
+    # Add error message if failed
+    if not success and error_message:
+        log_entry["error"] = error_message
+    
+    tweets_log.append(log_entry)
     # Keep only last 1000 entries to prevent file from growing too large
     if len(tweets_log) > 1000:
         tweets_log = tweets_log[-1000:]
     save_tweets_log(tweets_log)
 
+def log_successful_tweet(user_id, tweet_id=None, asin=None):
+    """Log a successful tweet post (backward compatibility)."""
+    log_tweet_attempt(user_id, success=True, tweet_id=tweet_id, asin=asin)
+
 def get_successful_tweets_last_hour():
     """Get count of successful tweets in the last hour."""
     tweets_log = load_tweets_log()
     one_hour_ago = time.time() - 3600  # 1 hour in seconds
-    count = sum(1 for tweet in tweets_log if tweet.get("timestamp", 0) >= one_hour_ago)
+    # Count only successful tweets (backward compatible: if 'success' field doesn't exist, assume success)
+    count = sum(1 for tweet in tweets_log 
+                if tweet.get("timestamp", 0) >= one_hour_ago 
+                and tweet.get("success", True))  # Default to True for backward compatibility
     return count
 
 # ---------------- PKCE HELPERS ----------------
@@ -429,15 +500,19 @@ def refresh_token_if_needed(user_id: str):
     save_users()
 
 # ---------------- TWEET ----------------
-def post_tweet_v2(user_id, text):
+def post_tweet_v2(user_id, text, asin=None):
     user = USERS.get(user_id)
     if not user:
-        return False, "User not found", None
+        error_msg = "User not found"
+        log_tweet_attempt(user_id, success=False, asin=asin, error_message=error_msg)
+        return False, error_msg, None
 
     try:
         refresh_token_if_needed(user_id)
     except Exception as e:
-        return False, f"Token refresh error: {e}", None
+        error_msg = f"Token refresh error: {e}"
+        log_tweet_attempt(user_id, success=False, asin=asin, error_message=error_msg)
+        return False, error_msg, None
 
     headers = {
         "Authorization": f"Bearer {USERS[user_id]['access_token']}",
@@ -445,21 +520,30 @@ def post_tweet_v2(user_id, text):
     }
     payload = {"text": text}
 
-    resp = requests.post(TWEET_URL, headers=headers, json=payload, timeout=30)
+    try:
+        resp = requests.post(TWEET_URL, headers=headers, json=payload, timeout=30)
+    except Exception as e:
+        error_msg = f"Request error: {str(e)}"
+        log_tweet_attempt(user_id, success=False, asin=asin, error_message=error_msg)
+        return False, error_msg, None
 
     # Some clients return 201, some return 200
     if resp.status_code in (200, 201):
         try:
             response_data = resp.json()
             tweet_id = response_data.get("data", {}).get("id")
-            # Log successful tweet
-            log_successful_tweet(user_id, tweet_id)
+            # Log successful tweet with ASIN if provided
+            log_tweet_attempt(user_id, success=True, tweet_id=tweet_id, asin=asin)
             return True, "Tweet posted", tweet_id
         except:
             # Log successful tweet even if we can't parse tweet_id
-            log_successful_tweet(user_id, None)
+            log_tweet_attempt(user_id, success=True, tweet_id=None, asin=asin)
             return True, "Tweet posted", None
-    return False, f"{resp.status_code} {resp.text}", None
+    else:
+        # Log failed tweet attempt
+        error_msg = f"{resp.status_code} {resp.text}"
+        log_tweet_attempt(user_id, success=False, asin=asin, error_message=error_msg)
+        return False, error_msg, None
 
 # ---------------- API ENDPOINTS ---------------- 
 @app.route("/api/post-tweet", methods=["POST"])
